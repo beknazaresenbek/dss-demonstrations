@@ -64,11 +64,13 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.ImportResource;
 import org.springframework.core.io.ClassPathResource;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyStore.PasswordProtection;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 @Configuration
@@ -175,6 +177,9 @@ public class DSSBeanConfig {
 
 	@Value("${trusted.source.keystore.password:}")
 	private String trustSourceKsPassword;
+
+	@Value("${trusted.source.keystore.base64encoded:}")
+	private String trustSourceKsBase64Encoded;
 
 
 	// can be null
@@ -290,14 +295,26 @@ public class DSSBeanConfig {
 		CommonTrustedCertificateSource trustedCertificateSource = new CommonTrustedCertificateSource();
 		if (Utils.isStringNotEmpty(trustSourceKsFilename)) {
 			try {
-				KeyStoreCertificateSource keyStore = new KeyStoreCertificateSource(
-						new ClassPathResource(trustSourceKsFilename).getFile(), trustSourceKsType, trustSourceKsPassword.toCharArray());
-				trustedCertificateSource.importAsTrusted(keyStore);
+                trustedCertificateSource.importAsTrusted(getKeyStoreCertificateSource());
 			} catch (IOException e) {
 				throw new DSSException("Unable to load the file " + adesKeyStoreFilename, e);
 			}
 		}
 		return trustedCertificateSource;
+	}
+
+	private KeyStoreCertificateSource getKeyStoreCertificateSource() throws IOException {
+		KeyStoreCertificateSource keyStore;
+		if (trustSourceKsBase64Encoded != null && !trustSourceKsBase64Encoded.isEmpty()) {
+            keyStore = new KeyStoreCertificateSource(
+					new ByteArrayInputStream(Base64.getDecoder().decode(trustSourceKsBase64Encoded)),
+					trustSourceKsType, trustSourceKsPassword.toCharArray());
+		} else {
+			keyStore = new KeyStoreCertificateSource(
+					new ClassPathResource(trustSourceKsFilename).getFile(),
+					trustSourceKsType, trustSourceKsPassword.toCharArray());
+		}
+		return keyStore;
 	}
 
 	@Bean
