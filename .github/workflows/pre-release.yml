@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: quay.io
-  REPOSITORY: beknazar
+  REPOSITORY: dome-marketplace
 
 jobs:
 
@@ -59,18 +59,28 @@ jobs:
         run: |
           mvn versions:set -DnewVersion=${{ needs.generate-version.outputs.version }}
 
-#      - name: Execute tests
-#        id: test
-#        run: |
-#          mvn clean test coveralls:jacoco -Dcoveralls.token=${{ secrets.COVERALLS_TOKEN }}
-#
-#      - name: Execute Integration-Tests
-#        id: it-test
-#        run: |
-#          mvn clean integration-test -Pintegration-test
+      - name: Build CRL-Demo Image
+        id: build-image-crl
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: crl-demo
+          tags: ${{ github.sha }} ${{ needs.generate-version.outputs.version }}
+          dockerfiles: |
+            ./Dockerfile-crl
+          context: ./
 
-      - name: Build Image
-        id: build-image
+      - name: Push To quay.io
+        id: push-to-quay-crl
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image-crl.outputs.image }}
+          tags: ${{ steps.build-image-crl.outputs.tags }}
+          registry: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Build DSS-Demo Image
+        id: build-image-dss
         uses: redhat-actions/buildah-build@v2
         with:
           image: dss-demo
@@ -80,11 +90,11 @@ jobs:
           context: ./
 
       - name: Push To quay.io
-        id: push-to-quay
+        id: push-to-quay-dss
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
+          image: ${{ steps.build-image-dss.outputs.image }}
+          tags: ${{ steps.build-image-dss.outputs.tags }}
           registry: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
