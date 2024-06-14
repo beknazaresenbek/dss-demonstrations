@@ -1,0 +1,110 @@
+name: Pre-Release
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+
+env:
+  REGISTRY: quay.io
+  REPOSITORY: dome-marketplace
+
+jobs:
+
+  generate-version:
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.out.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - id: bump
+        uses: zwaldowski/match-label-action@v1
+        with:
+          allowed: major,minor,patch
+
+      - uses: zwaldowski/semver-release-action@v2
+        with:
+          dry_run: true
+          bump: ${{ steps.bump.outputs.match }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get PR Number
+        id: pr_number
+        run: echo "::set-output name=nr::$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')"
+
+      - name: Set version output
+        id: out
+        run: echo "::set-output name=version::$(echo ${VERSION}-PRE-${{ steps.pr_number.outputs.nr }})"
+
+  # build
+  build-and-release:
+    needs: [ "generate-version" ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: '17'
+          java-package: jdk
+
+      - name: Set the version
+        run: |
+          mvn versions:set -DnewVersion=${{ needs.generate-version.outputs.version }}
+
+      - name: Build CRL-Demo Image
+        id: build-image-crl
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: crl-demo
+          tags: ${{ github.sha }} ${{ needs.generate-version.outputs.version }}
+          dockerfiles: |
+            ./Dockerfile-crl
+          context: ./
+
+      - name: Push To quay.io
+        id: push-to-quay-crl
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image-crl.outputs.image }}
+          tags: ${{ steps.build-image-crl.outputs.tags }}
+          registry: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Build DSS-Demo Image
+        id: build-image-dss
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: dss-demo
+          tags: ${{ github.sha }} ${{ needs.generate-version.outputs.version }}
+          dockerfiles: |
+            ./Dockerfile
+          context: ./
+
+      - name: Push To quay.io
+        id: push-to-quay-dss
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image-dss.outputs.image }}
+          tags: ${{ steps.build-image-dss.outputs.tags }}
+          registry: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: ${{ needs.generate-version.outputs.version }}
+          prerelease: true
+          title: ${{ needs.generate-version.outputs.version }}
+          files: |
+            target/dss-demo-${{ needs.generate-version.outputs.version }}.jar
+            LICENSE
