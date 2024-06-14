@@ -49,4 +49,9 @@ Bundles which contain the above demonstration can be downloaded from the [Maven 
 
 The code of the demonstration can be found on https://ec.europa.eu/digital-building-blocks/code/projects/ESIG/repos/dss-demos/browse
 
+# CRL demo
+
+To get successful CRL check during signature validation in integration tests, replace this
+[CRL file](./crl-demo/intermediate.crl.pem) with your own, rebuild the image and use in your Helm-Chart.
+
 [![License (LGPL version 2.1)](https://img.shields.io/badge/license-GNU%20LGPL%20version%202.1-blue.svg?style=flat-square)](https://www.gnu.org/licenses/lgpl-2.1.html)
